@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>COLOR MOMENT</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap');
 
@@ -347,28 +349,13 @@ const FIREBASE_CFG = {
   appId: "1:330719548656:web:b0d5d63615a1998b2b5e35"
 };
 
-function initFan() {
-  const s1 = document.createElement('script');
-  s1.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
-  s1.onload = () => {
-    const s2 = document.createElement('script');
-    s2.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js';
-    s2.onload = () => {
-      try {
-        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CFG);
-        firebaseDB = firebase.database();
-        onFanConnected();
-      } catch(e) {
-        document.getElementById('connectNote').textContent = '⚠ Errore: ' + e.message;
-      }
-    };
-    document.head.appendChild(s2);
-  };
-  document.head.appendChild(s1);
+try {
+  if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CFG);
+  firebaseDB = firebase.database();
+  onFanConnected();
+} catch(e) {
+  document.getElementById('connectNote').textContent = '⚠ Errore: ' + e.message;
 }
-
-// Auto-start
-initFan();
 
 function onFanConnected() {
   // Hide connect screen
