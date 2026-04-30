@@ -148,6 +148,7 @@ const safariTimeout = setTimeout(() => {
 
 function onConnected() {
   clearTimeout(safariTimeout);
+  dbg('onConnected called, listeners: ' + listenersAttached);
 
   // Nascondi connect screen
   const cs = document.getElementById('connect');
@@ -171,6 +172,7 @@ function onConnected() {
   // Ascolta comandi dalla regia
   db.ref('state').on('value', snap => {
     const cmd = snap.val();
+    dbg('STATE received: ' + (cmd ? JSON.stringify(cmd).substr(0,60) : 'null'));
     if (cmd) applyCommand(cmd);
   });
 
@@ -190,11 +192,29 @@ function onConnected() {
   requestWakeLock();
 }
 
+// ─── DEBUG PANEL ───
+function dbg(msg) {
+  let el = document.getElementById('dbgPanel');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dbgPanel';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:rgba(0,0,0,.85);color:#0f0;font-size:11px;padding:6px 10px;font-family:monospace;max-height:120px;overflow-y:auto;';
+    document.body.appendChild(el);
+  }
+  const line = document.createElement('div');
+  line.textContent = new Date().toISOString().substr(11,8) + ' ' + msg;
+  el.insertBefore(line, el.firstChild);
+  if (el.children.length > 8) el.removeChild(el.lastChild);
+}
+
 // ─── APPLY COMMAND ───
 function applyCommand(cmd) {
+  dbg('CMD: ' + JSON.stringify(cmd).substr(0,80));
+
   if (cmd.blackout) {
     BLK.classList.add('on');
     isBlackout = true;
+    dbg('BLACKOUT ON');
     return;
   }
 
@@ -203,34 +223,24 @@ function applyCommand(cmd) {
 
   stopAllEffects();
 
-  // Applica colore
   const hex = cmd.colorHex || '#000000';
-  SCR.style.background = hex;
+  dbg('Applying hex: ' + hex + ' effect: ' + cmd.effect);
 
-  // Mostra label effetto
+  // Forza colore con !important via setAttribute
+  SCR.setAttribute('style', 'position:fixed;inset:0;z-index:0;transition:background .08s;background:' + hex + ' !important;');
+
   FXL.textContent = (cmd.effect || '').toUpperCase();
   FXL.className = 'hud-fx show';
 
-  // Applica effetto
   switch (cmd.effect) {
-    case 'flash':
-      startFlash();
-      break;
-    case 'wave':
-      startWave(hex);
-      break;
-    case 'rainbow':
-      RB.style.opacity = '.9';
-      SCR.style.background = '#000';
-      break;
-    case 'pulse':
-      SCR.classList.add('pulsing');
-      break;
-    case 'fade':
-      SCR.classList.add('fading');
-      break;
-    // 'solid' — niente da fare, colore già applicato
+    case 'flash':   startFlash(); break;
+    case 'wave':    startWave(hex); break;
+    case 'rainbow': RB.style.opacity = '.9'; SCR.style.background = '#000'; break;
+    case 'pulse':   SCR.classList.add('pulsing'); break;
+    case 'fade':    SCR.classList.add('fading'); break;
   }
+
+  dbg('Done. SCR bg: ' + SCR.style.background);
 }
 
 function stopAllEffects() {
