@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEST</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+</head>
+<body style="background:#000;color:#fff;font-family:monospace;padding:20px;font-size:14px;">
+
+<div id="log"></div>
+
+<script>
+function log(msg, color) {
+  var d = document.getElementById('log');
+  var p = document.createElement('p');
+  p.style.color = color || '#fff';
+  p.style.margin = '4px 0';
+  p.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
+  d.appendChild(p);
+}
+
+log('Pagina caricata', '#0f0');
+
+firebase.initializeApp({
+  apiKey: "AIzaSyAyAT80EP_gCc7swPIwAXOv33z6zaw1bDQ",
+  authDomain: "color-moment-3e8ac.firebaseapp.com",
+  databaseURL: "https://color-moment-3e8ac-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "color-moment-3e8ac",
+  storageBucket: "color-moment-3e8ac.firebasestorage.app",
+  messagingSenderId: "330719548656",
+  appId: "1:330719548656:web:b0d5d63615a1998b2b5e35"
+});
+
+log('Firebase inizializzato', '#0f0');
+
+var db = firebase.database();
+
+db.ref('.info/connected').on('value', function(snap) {
+  if (snap.val()) {
+    log('CONNESSO a Firebase!', '#00e676');
+  } else {
+    log('Disconnesso', '#f00');
+  }
+});
+
+db.ref('state').on('value', function(snap) {
+  var val = snap.val();
+  log('STATE: ' + JSON.stringify(val), '#0ff');
+  if (val && val.colorHex) {
+    document.body.style.background = val.colorHex;
+    log('Colore applicato: ' + val.colorHex, '#ff0');
+  }
+});
+
+log('Listener attaccati — premi GO dalla regia', '#888');
+</script>
+
+</body>
+</html>
