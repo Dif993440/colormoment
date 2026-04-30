@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>COLOR MOMENT</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family:-apple-system,sans-serif; transition:background .08s; }
+
+/* Effetti sopra il body */
+#rainbow { position:fixed; top:0; left:0; right:0; bottom:0; background:linear-gradient(90deg,#f00,#f80,#ff0,#0f0,#0ff,#00f,#f0f,#f00); background-size:200% 100%; opacity:0; z-index:3; pointer-events:none; animation:rb 3s linear infinite; }
+#flash   { position:fixed; top:0; left:0; right:0; bottom:0; background:#fff; opacity:0; z-index:4; pointer-events:none; }
+#blackout{ position:fixed; top:0; left:0; right:0; bottom:0; background:#000; opacity:0; z-index:5; pointer-events:none; transition:opacity .3s; }
+#blackout.on { opacity:1; }
+#waveCanvas { position:fixed; top:0; left:0; right:0; bottom:0; width:100%; height:100%; opacity:0; z-index:2; pointer-events:none; }
+
+/* HUD */
+#hud { position:fixed; top:0; left:0; right:0; bottom:0; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:52px 0 50px; pointer-events:none; }
+#logo { font-size:11px; letter-spacing:5px; text-transform:uppercase; color:rgba(255,255,255,.07); font-weight:700; }
+#statusRow { display:flex; align-items:center; gap:7px; }
+#dot { width:7px; height:7px; border-radius:50%; background:#1a1a1a; }
+#dot.on { background:#00e676; box-shadow:0 0 10px #00e676; animation:blink 2s infinite; }
+#stxt { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,.15); }
+
+@keyframes rb    { to { background-position:200% 0; } }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+@keyframes pulseAnim { 0%{transform:scale(1)} 50%{transform:scale(1.04)} 100%{transform:scale(1)} }
+@keyframes fadeAnim  { 0%,100%{opacity:.15} 50%{opacity:1} }
+body.pulsing { animation:pulseAnim .6s ease-in-out infinite; }
+body.fading  { animation:fadeAnim 1.8s ease-in-out infinite; }
+</style>
+
+</head>
+<body>
+
+<canvas id="waveCanvas"></canvas>
+
+<div id="rainbow"></div>
+<div id="flash"></div>
+<div id="blackout"></div>
+<div id="hud">
+  <div id="logo">COLOR MOMENT</div>
+  <div id="statusRow">
+    <div id="dot"></div>
+    <div id="stxt">CONNESSIONE...</div>
+  </div>
+</div>
+
+<script>
+// Elementi effetti
+var FL  = document.getElementById('flash');
+var RB  = document.getElementById('rainbow');
+var WCV = document.getElementById('waveCanvas');
+var BLK = document.getElementById('blackout');
+var DOT = document.getElementById('dot');
+var STX = document.getElementById('stxt');
+var wCtx = WCV.getContext('2d');
+var flashInt = null, waveRaf = null, lastBeat = 0;
+
+function resize() { WCV.width = window.innerWidth; WCV.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+// ── ZONA — legge il parametro dall'URL ──
+var zona = (new URLSearchParams(window.location.search).get('zona') || 'A').toUpperCase();
+var stateRef = 'state/zona' + zona;
+var beatRef  = 'beat/zona' + zona;
+var fansRef  = 'fans/zona' + zona + '/count';
+
+// Mostra zona nell'HUD
+document.getElementById('logo').textContent = 'COLOR MOMENT — ZONA ' + zona;
+firebase.initializeApp({
+  apiKey: "AIzaSyAyAT80EP_gCc7swPIwAXOv33z6zaw1bDQ",
+  authDomain: "color-moment-3e8ac.firebaseapp.com",
+  databaseURL: "https://color-moment-3e8ac-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "color-moment-3e8ac",
+  storageBucket: "color-moment-3e8ac.firebasestorage.app",
+  messagingSenderId: "330719548656",
+  appId: "1:330719548656:web:b0d5d63615a1998b2b5e35"
+});
+
+var db = firebase.database();
+
+db.ref('.info/connected').on('value', function(snap) {
+  if (snap.val()) {
+    DOT.className = 'on';
+    STX.textContent = 'CONNESSO';
+    db.ref(fansRef).transaction(function(c) { return (c||0)+1; });
+    db.ref(fansRef).onDisconnect().transaction(function(c) { return Math.max(0,(c||1)-1); });
+    if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(function(){});
+  } else {
+    DOT.className = '';
+    STX.textContent = 'RICONNESSIONE...';
+  }
+});
+
+// STATE — ascolta la sua zona
+db.ref(stateRef).on('value', function(snap) {
+  var cmd = snap.val();
+  if (!cmd) return;
+
+  // Blackout
+  if (cmd.blackout) { BLK.classList.add('on'); return; }
+  BLK.classList.remove('on');
+
+  // Stop effetti precedenti
+  clearInterval(flashInt);
+  FL.style.opacity = '0';
+  RB.style.opacity = '0';
+  WCV.style.opacity = '0';
+  document.body.classList.remove('pulsing','fading');
+  if (waveRaf) { cancelAnimationFrame(waveRaf); waveRaf = null; }
+
+  // Applica colore — identico a test.html
+  var hex = cmd.colorHex || '#000000';
+  document.body.style.background = hex;
+
+  // Applica effetto
+  if (cmd.effect === 'flash') {
+    var on = true;
+    flashInt = setInterval(function() { FL.style.opacity = on ? '0.9' : '0'; on = !on; }, 160);
+
+  } else if (cmd.effect === 'wave') {
+    WCV.style.opacity = '1';
+    document.body.style.background = 'rgba(0,0,0,.7)';
+    var rgb = hexRgb(hex), t = 0;
+    (function loop() {
+      waveRaf = requestAnimationFrame(loop);
+      wCtx.clearRect(0,0,WCV.width,WCV.height);
+      t += 0.04;
+      for (var l=0;l<5;l++) {
+        wCtx.beginPath();
+        wCtx.moveTo(0, WCV.height/2);
+        for (var x=0;x<=WCV.width;x+=4)
+          wCtx.lineTo(x, WCV.height/2 + Math.sin(x*(0.008-l*0.001)+t+(l/5)*Math.PI*2)*(WCV.height*0.08+l*10));
+        wCtx.strokeStyle = 'rgba('+rgb.r+','+rgb.g+','+rgb.b+','+(0.5-l*0.08)+')';
+        wCtx.lineWidth = 3-l*0.3;
+        wCtx.stroke();
+      }
+    })();
+
+  } else if (cmd.effect === 'rainbow') {
+    RB.style.opacity = '1';
+    document.body.style.background = '#000';
+
+  } else if (cmd.effect === 'pulse') {
+    document.body.classList.add('pulsing');
+
+  } else if (cmd.effect === 'fade') {
+    document.body.classList.add('fading');
+  }
+});
+
+// BEAT — ascolta il beat della sua zona
+db.ref(beatRef).on('value', function(snap) {
+  var beat = snap.val();
+  if (!beat) return;
+  var age = Date.now() - beat.ts;
+  if (age >= 0 && age < 500 && beat.ts !== lastBeat) {
+    lastBeat = beat.ts;
+    if (navigator.vibrate) navigator.vibrate([80]);
+    FL.style.transition = 'opacity .04s';
+    FL.style.opacity = '1';
+    setTimeout(function() { FL.style.transition = 'opacity .14s'; FL.style.opacity = '0'; }, 60);
+  }
+});
+
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && 'wakeLock' in navigator)
+    navigator.wakeLock.request('screen').catch(function(){});
+});
+
+function hexRgb(hex) {
+  var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? {r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)} : {r:255,g:255,b:255};
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(function(){});
+</script>
+
+</body>
+</html>
