@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COLOR MOMENT — REGIA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+/* ── RESET & BASE ── */
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#030508;
+  --surface:#07090f;
+  --panel:#0a0e18;
+  --panel2:#0d1220;
+  --border:#131d30;
+  --border2:#1a2540;
+  --accent:#0057ff;
+  --accent2:#e8000d;
+  --green:#00e676;
+  --amber:#ffaa00;
+  --text:#7a99c8;
+  --text2:#a8c4e8;
+  --text3:#d0e4ff;
+  --mono:'Share Tech Mono',monospace;
+  --display:'Rajdhani',sans-serif;
+  --c-blu:#0057ff;
+  --c-rosso:#e8000d;
+  --c-bianco:#e8f0ff;
+  --c-verde:#00c853;
+  --c-viola:#aa00ff;
+  --c-giallo:#ffd600;
+}
+
+html,body{width:100%;height:100%;overflow:hidden;background:var(–bg);color:var(–text);font-family:var(–display);}
+
+/* Scanline overlay */
+body::after{content:’’;position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none;z-index:9999;}
+
+/* ── LAYOUT ── */
+.shell{display:grid;grid-template-rows:48px 1fr 220px 56px;height:100vh;gap:1px;background:var(–border);}
+
+/* ── HEADER ── */
+header{background:var(–panel);display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(–border2);}
+
+.logo-wrap{display:flex;align-items:center;gap:12px;}
+.logo{font-size:1.1rem;font-weight:700;letter-spacing:.3em;color:var(–text3);text-transform:uppercase;}
+.logo span{color:var(–accent);}
+.build{font-family:var(–mono);font-size:.6rem;color:var(–border2);letter-spacing:.15em;}
+
+.header-mid{display:flex;align-items:center;gap:24px;}
+.stat-chip{display:flex;align-items:center;gap:8px;padding:4px 14px;background:var(–panel2);border:1px solid var(–border2);font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;}
+.stat-chip .val{font-family:var(–mono);color:var(–accent);font-size:.9rem;}
+.dot{width:6px;height:6px;border-radius:50%;background:#1a2a1a;}
+.dot.live{background:var(–green);box-shadow:0 0 8px var(–green);animation:pulse-d 2s infinite;}
+@keyframes pulse-d{0%,100%{opacity:1}50%{opacity:.3}}
+
+.audio-mode{font-size:.65rem;letter-spacing:.15em;color:var(–amber);text-transform:uppercase;}
+
+/* ── MAIN AREA ── */
+.main{display:grid;grid-template-columns:1fr 320px;background:var(–bg);gap:1px;}
+
+/* ── STADIUM PREVIEW ── */
+.stadium{background:var(–panel);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+
+.stadium-canvas{position:absolute;inset:0;}
+
+.stadium-label{position:absolute;top:12px;left:16px;font-family:var(–mono);font-size:.6rem;letter-spacing:.2em;color:rgba(255,255,255,.15);text-transform:uppercase;}
+
+.beat-ring{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border-radius:50%;border:1px solid rgba(0,87,255,.1);pointer-events:none;transition:all .05s;}
+.beat-ring.hit{border-color:rgba(0,87,255,.8);box-shadow:0 0 60px rgba(0,87,255,.4);transform:translate(-50%,-50%) scale(1.15);}
+
+/* ── BEAT ENGINE PANEL ── */
+.beat-panel{background:var(–panel);display:flex;flex-direction:column;border-left:1px solid var(–border);}
+
+.beat-section{padding:14px 16px;border-bottom:1px solid var(–border);}
+.section-label{font-family:var(–mono);font-size:.55rem;letter-spacing:.25em;color:var(–border2);text-transform:uppercase;margin-bottom:10px;}
+
+/* BPM Display */
+.bpm-display{display:flex;align-items:baseline;gap:6px;margin-bottom:8px;}
+.bpm-num{font-family:var(–mono);font-size:3.5rem;font-weight:400;color:var(–text3);line-height:1;letter-spacing:-.02em;transition:color .1s;}
+.bpm-num.beat-flash{color:var(–accent);}
+.bpm-unit{font-size:.65rem;letter-spacing:.2em;color:var(–text);text-transform:uppercase;}
+.bpm-confidence{font-family:var(–mono);font-size:.6rem;color:var(–text);margin-left:auto;}
+
+/* Beat indicator */
+.beat-indicator{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.beat-dot{width:10px;height:10px;border-radius:50%;background:var(–border2);transition:background .03s,box-shadow .03s;flex-shrink:0;}
+.beat-dot.on{background:var(–green);box-shadow:0 0 14px var(–green);}
+.beat-bar-wrap{flex:1;height:3px;background:var(–border);border-radius:2px;overflow:hidden;}
+.beat-bar-fill{height:100%;background:var(–accent);width:0%;transition:width .05s,background .05s;border-radius:2px;}
+.beat-bar-fill.peak{background:var(–accent2);}
+
+/* Waveform */
+.waveform-wrap{height:70px;background:var(–panel2);border:1px solid var(–border);position:relative;overflow:hidden;}
+#waveCanvas{width:100%;height:100%;}
+.waveform-cursor{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.3);left:50%;}
+
+/* Beat grid */
+.beat-grid-wrap{height:28px;background:var(–panel2);border:1px solid var(–border);position:relative;overflow:hidden;margin-top:6px;}
+#gridCanvas{width:100%;height:100%;}
+
+/* Controls */
+.controls-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+
+.btn-sm{padding:5px 12px;font-family:var(–display);font-size:.65rem;letter-spacing:.15em;font-weight:600;text-transform:uppercase;border:1px solid var(–border2);background:var(–panel2);color:var(–text);cursor:pointer;transition:all .15s;}
+.btn-sm:hover{border-color:var(–accent);color:var(–text3);}
+.btn-sm.active{background:var(–accent);border-color:var(–accent);color:#fff;box-shadow:0 0 16px rgba(0,87,255,.3);}
+.btn-sm.danger{border-color:var(–accent2);}
+.btn-sm.danger:hover{background:var(–accent2);color:#fff;}
+.btn-sm.success{border-color:var(–green);}
+.btn-sm.success.active{background:var(–green);border-color:var(–green);color:#000;}
+
+.slider-row{display:flex;align-items:center;gap:8px;}
+.slider-label{font-family:var(–mono);font-size:.58rem;letter-spacing:.12em;color:var(–text);text-transform:uppercase;white-space:nowrap;}
+.slider-val{font-family:var(–mono);font-size:.65rem;color:var(–accent);min-width:28px;text-align:right;}
+input[type=range]{-webkit-appearance:none;flex:1;height:2px;background:var(–border2);outline:none;border-radius:1px;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:var(–accent);cursor:pointer;}
+
+.toggle-row{display:flex;align-items:center;justify-content:space-between;}
+.toggle-label{font-size:.7rem;letter-spacing:.1em;color:var(–text2);}
+.toggle-sub{font-size:.6rem;color:var(–text);letter-spacing:.05em;}
+.toggle{position:relative;width:38px;height:20px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.tslider{position:absolute;inset:0;background:var(–border2);border-radius:10px;cursor:pointer;transition:.2s;}
+.tslider::before{content:’’;position:absolute;width:14px;height:14px;left:3px;top:3px;border-radius:50%;background:var(–text);transition:.2s;}
+.toggle input:checked+.tslider{background:var(–accent);}
+.toggle input:checked+.tslider::before{transform:translateX(18px);background:#fff;}
+
+/* ── BOTTOM PANELS ── */
+.bottom{display:grid;grid-template-columns:1fr 1fr 280px;gap:1px;background:var(–border);}
+
+.bottom-panel{background:var(–panel);padding:14px 16px;}
+
+/* Color grid */
+.color-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;}
+.color-btn{height:52px;border:2px solid transparent;cursor:pointer;font-family:var(–display);font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;transition:all .12s;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+.color-btn::after{content:’’;position:absolute;inset:0;background:rgba(255,255,255,0);transition:.15s;}
+.color-btn:hover::after{background:rgba(255,255,255,.08);}
+.color-btn.sel{border-color:#fff;box-shadow:0 0 20px rgba(255,255,255,.15),inset 0 0 20px rgba(255,255,255,.05);transform:scale(1.04);}
+.color-btn[data-c=“blu”]   {background:var(–c-blu);color:#fff;}
+.color-btn[data-c=“rosso”] {background:var(–c-rosso);color:#fff;}
+.color-btn[data-c=“bianco”]{background:var(–c-bianco);color:#111;}
+.color-btn[data-c=“verde”] {background:var(–c-verde);color:#000;}
+.color-btn[data-c=“viola”] {background:var(–c-viola);color:#fff;}
+.color-btn[data-c=“giallo”]{background:var(–c-giallo);color:#000;}
+
+/* Effect grid */
+.fx-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.fx-btn{height:52px;border:1px solid var(–border2);background:var(–panel2);color:var(–text);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:all .12s;font-family:var(–display);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;}
+.fx-btn .icon{font-size:1.1rem;line-height:1;}
+.fx-btn:hover{border-color:var(–accent);color:var(–text3);background:rgba(0,87,255,.06);}
+.fx-btn.sel{border-color:var(–accent);background:rgba(0,87,255,.12);color:#fff;box-shadow:0 0 12px rgba(0,87,255,.2);}
+
+/* Right panel — GO + QR */
+.go-panel{display:flex;flex-direction:column;gap:8px;}
+
+#goBtn{flex:1;min-height:70px;background:linear-gradient(135deg,var(–accent),#003db3);border:none;font-family:var(–display);font-size:2rem;font-weight:700;letter-spacing:.3em;color:#fff;cursor:pointer;text-transform:uppercase;position:relative;overflow:hidden;transition:all .12s;}
+#goBtn::before{content:’’;position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);transform:translateX(-100%);}
+#goBtn:hover{box-shadow:0 0 40px rgba(0,87,255,.5);}
+#goBtn:hover::before{animation:shine .4s forwards;}
+#goBtn:active{transform:scale(.97);}
+@keyframes shine{to{transform:translateX(100%)}}
+#goBtn.beat-pulse{box-shadow:0 0 60px rgba(0,87,255,.8);}
+
+.go-bottom{display:flex;gap:6px;}
+#blackoutBtn{flex:1;height:34px;background:transparent;border:1px solid var(–border2);font-family:var(–display);font-size:.65rem;letter-spacing:.2em;color:var(–text);cursor:pointer;text-transform:uppercase;transition:all .15s;}
+#blackoutBtn:hover{border-color:var(–accent2);color:var(–accent2);}
+#blackoutBtn.on{background:var(–accent2);border-color:var(–accent2);color:#fff;box-shadow:0 0 20px rgba(232,0,13,.4);}
+
+.qr-mini{width:34px;height:34px;background:var(–panel2);border:1px solid var(–border2);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;}
+.qr-mini:hover .qr-tooltip{display:block;}
+.qr-tooltip{display:none;position:absolute;bottom:40px;right:0;background:var(–panel);border:1px solid var(–border2);padding:8px;z-index:100;}
+.qr-tooltip canvas{display:block;}
+
+/* ── FOOTER ── */
+footer{background:var(–panel);display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-top:1px solid var(–border);}
+.footer-left{display:flex;align-items:center;gap:20px;}
+.footer-stat{font-family:var(–mono);font-size:.6rem;letter-spacing:.12em;color:var(–border2);}
+.footer-stat span{color:var(–text);}
+.latency-comp{display:flex;align-items:center;gap:10px;}
+.latency-label{font-family:var(–mono);font-size:.6rem;letter-spacing:.12em;color:var(–text);text-transform:uppercase;}
+.latency-val{font-family:var(–mono);font-size:.7rem;color:var(–accent);min-width:40px;}
+#latencySlider{width:120px;}
+</style>
+
+</head>
+<body>
+<div class="shell">
+
+<!-- HEADER -->
+
+<header>
+  <div class="logo-wrap">
+    <div class="logo">Color <span>Moment</span></div>
+    <div class="build">REGIA v2.0</div>
+  </div>
+  <div class="header-mid">
+    <div class="stat-chip">
+      <div class="dot" id="connDot"></div>
+      <span id="connText">OFFLINE</span>
+    </div>
+    <div class="stat-chip">FAN <span class="val" id="fanCount">0</span></div>
+    <div class="audio-mode" id="audioModeLabel">NO AUDIO</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button class="btn-sm" id="auxBtn" onclick="startAux()">⚡ AUX IN</button>
+    <button class="btn-sm" id="micBtn" onclick="startMic()">🎙 MIC</button>
+    <button class="btn-sm danger" onclick="stopAudio()">■ STOP</button>
+  </div>
+</header>
+
+<!-- MAIN -->
+
+<div class="main">
+
+  <!-- STADIUM PREVIEW -->
+
+  <div class="stadium">
+    <canvas class="stadium-canvas" id="stadiumCanvas"></canvas>
+    <div class="beat-ring" id="beatRing"></div>
+    <div class="stadium-label">ANTEPRIMA STADIO</div>
+  </div>
+
+  <!-- BEAT ENGINE -->
+
+  <div class="beat-panel">
+
+```
+<!-- BPM + indicator -->
+<div class="beat-section">
+  <div class="section-label">Beat Engine</div>
+  <div class="bpm-display">
+    <div class="bpm-num" id="bpmNum">---</div>
+    <div class="bpm-unit">BPM</div>
+    <div class="bpm-confidence" id="bpmConf">CONF: --</div>
+  </div>
+  <div class="beat-indicator">
+    <div class="beat-dot" id="beatDot"></div>
+    <div class="beat-bar-wrap"><div class="beat-bar-fill" id="beatBar"></div></div>
+    <div style="font-family:var(--mono);font-size:.6rem;color:var(--text);min-width:32px;text-align:right;" id="bassLevel">0</div>
+  </div>
+</div>
+
+<!-- Waveform -->
+<div class="beat-section">
+  <div class="section-label">Waveform</div>
+  <div class="waveform-wrap">
+    <canvas id="waveCanvas"></canvas>
+    <div class="waveform-cursor"></div>
+  </div>
+  <div class="beat-grid-wrap" style="margin-top:6px;">
+    <canvas id="gridCanvas"></canvas>
+  </div>
+</div>
+
+<!-- Auto Beat -->
+<div class="beat-section">
+  <div class="section-label">Sincronizzazione</div>
+  <div class="toggle-row" style="margin-bottom:10px;">
+    <div>
+      <div class="toggle-label">AUTO BEAT FLASH</div>
+      <div class="toggle-sub">Invia ai fan ad ogni beat</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="autoBeatToggle">
+      <span class="tslider"></span>
+    </label>
+  </div>
+  <div class="toggle-row" style="margin-bottom:10px;">
+    <div>
+      <div class="toggle-label">BEAT GRID LOCK</div>
+      <div class="toggle-sub">Usa griglia predittiva</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="gridLockToggle" checked>
+      <span class="tslider"></span>
+    </label>
+  </div>
+  <div class="slider-row" style="margin-bottom:8px;">
+    <div class="slider-label">SENSIB.</div>
+    <input type="range" id="sensSlider" min="1" max="10" value="5">
+    <div class="slider-val" id="sensVal">5</div>
+  </div>
+  <div class="controls-row">
+    <button class="btn-sm" onclick="tapTempo()">TAP TEMPO</button>
+    <button class="btn-sm danger" onclick="resetBeatGrid()">RESET GRID</button>
+    <button class="btn-sm success" id="syncBtn" onclick="forceSyncBeat()">SYNC</button>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<!-- BOTTOM -->
+
+<div class="bottom">
+
+  <!-- COLORI -->
+
+  <div class="bottom-panel">
+    <div class="section-label">Colori</div>
+    <div class="color-grid">
+      <button class="color-btn" data-c="blu"    onclick="selColor(this)">BLU</button>
+      <button class="color-btn" data-c="rosso"  onclick="selColor(this)">ROSSO</button>
+      <button class="color-btn" data-c="bianco" onclick="selColor(this)">BIANCO</button>
+      <button class="color-btn" data-c="verde"  onclick="selColor(this)">VERDE</button>
+      <button class="color-btn" data-c="viola"  onclick="selColor(this)">VIOLA</button>
+      <button class="color-btn" data-c="giallo" onclick="selColor(this)">GIALLO</button>
+    </div>
+  </div>
+
+  <!-- EFFETTI -->
+
+  <div class="bottom-panel">
+    <div class="section-label">Effetti</div>
+    <div class="fx-grid">
+      <button class="fx-btn" data-f="solid"   onclick="selFx(this)"><span class="icon">■</span>SOLIDO</button>
+      <button class="fx-btn" data-f="flash"   onclick="selFx(this)"><span class="icon">⚡</span>FLASH</button>
+      <button class="fx-btn" data-f="wave"    onclick="selFx(this)"><span class="icon">〰</span>WAVE</button>
+      <button class="fx-btn" data-f="rainbow" onclick="selFx(this)"><span class="icon">🌈</span>RAINBOW</button>
+      <button class="fx-btn" data-f="pulse"   onclick="selFx(this)"><span class="icon">◎</span>PULSE</button>
+      <button class="fx-btn" data-f="fade"    onclick="selFx(this)"><span class="icon">◑</span>FADE</button>
+    </div>
+  </div>
+
+  <!-- GO PANEL -->
+
+  <div class="bottom-panel go-panel">
+    <button id="goBtn" onclick="sendCommand()">GO ▶</button>
+    <div class="go-bottom">
+      <button id="blackoutBtn" onclick="toggleBlackout()">⬛ BLACKOUT</button>
+      <div class="qr-mini" title="QR Fan">
+        <div style="font-size:.6rem;color:var(--text);">QR</div>
+        <div class="qr-tooltip" id="qrTooltip"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+
+<footer>
+  <div class="footer-left">
+    <div class="footer-stat">ULTIMO BEAT: <span id="lastBeatAgo">--</span></div>
+    <div class="footer-stat">BEATS RILEVATI: <span id="beatCount">0</span></div>
+    <div class="footer-stat">SORGENTE: <span id="audioSource">--</span></div>
+  </div>
+  <div class="latency-comp">
+    <div class="latency-label">COMP. LATENZA</div>
+    <input type="range" id="latencySlider" min="-200" max="200" value="0">
+    <div class="latency-val" id="latencyVal">0ms</div>
+  </div>
+</footer>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════
+const CFG = {
+  apiKey:"AIzaSyAyAT80EP_gCc7swPIwAXOv33z6zaw1bDQ",
+  authDomain:"color-moment-3e8ac.firebaseapp.com",
+  databaseURL:"https://color-moment-3e8ac-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:"color-moment-3e8ac",
+  storageBucket:"color-moment-3e8ac.firebasestorage.app",
+  messagingSenderId:"330719548656",
+  appId:"1:330719548656:web:b0d5d63615a1998b2b5e35"
+};
+
+const colorMap = {
+  blu:'#0057ff', rosso:'#e8000d', bianco:'#e8f0ff',
+  verde:'#00c853', viola:'#aa00ff', giallo:'#ffd600'
+};
+
+let db = null;
+let selColorKey = 'blu';
+let selFxKey = 'solid';
+let isBlackout = false;
+let audioCtx = null, analyser = null, audioSource = null, audioStream = null;
+let audioMode = null; // 'aux' | 'mic'
+let animFrame = null;
+let beatCount = 0;
+let lastBeatTime = 0;
+let latencyComp = 0;
+
+// ── BEAT ENGINE STATE ──
+const beatHistory = [];       // timestamp dei beat rilevati
+const energyHistory = [];     // storia energia per adaptive threshold
+const beatGridTimes = [];     // griglia predittiva
+let bpm = 0;
+let bpmConfidence = 0;
+let adaptiveThreshold = 0.5;
+let gridInterval = 0;
+let lastGridBeat = 0;
+let tapTimes = [];
+
+// ── WAVEFORM HISTORY ──
+const waveHistory = new Array(256).fill(0);
+
+// ── STADIUM CANVAS ──
+const stadiumCvs = document.getElementById('stadiumCanvas');
+const sCtx = stadiumCvs.getContext('2d');
+const crowd = [];
+let stadiumColor = '#000';
+let stadiumBeatFlash = 0;
+
+// ── WAVE / GRID CANVAS ──
+const waveCvs = document.getElementById('waveCanvas');
+const wCtx = waveCvs.getContext('2d');
+const gridCvs = document.getElementById('gridCanvas');
+const gCtx = gridCvs.getContext('2d');
+
+// ════════════════════════════════════════════════════
+// FIREBASE
+// ════════════════════════════════════════════════════
+firebase.initializeApp(CFG);
+db = firebase.database();
+
+// Keepalive — mantieni Firebase sveglio
+setInterval(() => {
+  if (db) db.ref('.info/serverTimeOffset').once('value');
+}, 5 * 60 * 1000);
+
+db.ref('.info/connected').on('value', snap => {
+  const connected = snap.val();
+  document.getElementById('connDot').className = 'dot' + (connected ? ' live' : '');
+  document.getElementById('connText').textContent = connected ? 'LIVE' : 'OFFLINE';
+});
+
+db.ref('fans/count').on('value', snap => {
+  document.getElementById('fanCount').textContent = snap.val() || 0;
+});
+
+function pushCmd(cmd) {
+  if (db) db.ref('state').set(cmd);
+}
+
+function pushBeat(colorHex) {
+  if (db) db.ref('beat').set({ ts: Date.now(), colorHex });
+}
+
+// ════════════════════════════════════════════════════
+// STADIUM CANVAS — crowd simulation
+// ════════════════════════════════════════════════════
+function initStadium() {
+  resizeStadium();
+  window.addEventListener('resize', resizeStadium);
+  // Genera punti folla
+  for (let i = 0; i < 300; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = 0.28 + Math.random() * 0.22;
+    crowd.push({
+      x: 0.5 + Math.cos(angle) * r * 0.85,
+      y: 0.42 + Math.sin(angle) * r * 0.52,
+      size: 1.5 + Math.random() * 1.5,
+      phase: Math.random() * Math.PI * 2,
+      bright: 0.2 + Math.random() * 0.6
+    });
+  }
+  drawStadium();
+}
+
+function resizeStadium() {
+  stadiumCvs.width = stadiumCvs.offsetWidth;
+  stadiumCvs.height = stadiumCvs.offsetHeight;
+}
+
+function drawStadium() {
+  requestAnimationFrame(drawStadium);
+  const W = stadiumCvs.width, H = stadiumCvs.height;
+  sCtx.clearRect(0, 0, W, H);
+
+  // Background gradient
+  const bg = sCtx.createRadialGradient(W/2, H*0.4, 0, W/2, H*0.4, W*0.6);
+  bg.addColorStop(0, 'rgba(0,20,60,.8)');
+  bg.addColorStop(1, 'rgba(0,0,0,1)');
+  sCtx.fillStyle = bg;
+  sCtx.fillRect(0, 0, W, H);
+
+  // Color overlay per stato corrente
+  if (!isBlackout && stadiumColor !== '#000') {
+    const overlay = sCtx.createRadialGradient(W/2, H*0.4, 0, W/2, H*0.4, W*0.7);
+    overlay.addColorStop(0, hexAlpha(stadiumColor, 0.15 + stadiumBeatFlash * 0.3));
+    overlay.addColorStop(1, hexAlpha(stadiumColor, 0.02));
+    sCtx.fillStyle = overlay;
+    sCtx.fillRect(0, 0, W, H);
+  }
+
+  // Beat flash decay
+  stadiumBeatFlash = Math.max(0, stadiumBeatFlash - 0.06);
+
+  // Crowd dots
+  const t = Date.now() / 1000;
+  const hex = isBlackout ? '#111' : stadiumColor;
+  const rgb = hexToRgb(hex);
+
+  for (const p of crowd) {
+    const px = p.x * W, py = p.y * H;
+    const flicker = 0.5 + 0.5 * Math.sin(t * 2 + p.phase);
+    const alpha = p.bright * (isBlackout ? 0.05 : (0.3 + flicker * 0.4 + stadiumBeatFlash * 0.4));
+    sCtx.beginPath();
+    sCtx.arc(px, py, p.size * (1 + stadiumBeatFlash * 0.5), 0, Math.PI * 2);
+    sCtx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha.toFixed(2)})`;
+    sCtx.fill();
+  }
+
+  // Ellipse rings
+  sCtx.strokeStyle = 'rgba(0,87,255,.08)';
+  sCtx.lineWidth = 1;
+  for (let i = 1; i <= 3; i++) {
+    sCtx.beginPath();
+    sCtx.ellipse(W/2, H*0.42, W*0.38*i/3, H*0.26*i/3, 0, 0, Math.PI*2);
+    sCtx.stroke();
+  }
+}
+
+// ════════════════════════════════════════════════════
+// AUDIO ENGINE
+// ════════════════════════════════════════════════════
+async function startAux() {
+  // AUX = line-in / audio input del sistema
+  // Su Mac: Soundflower/BlackHole. Su Windows: Stereo Mix
+  try {
+    const constraints = {
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        // Tenta di selezionare l'input line-in
+        channelCount: 2,
+        sampleRate: 44100
+      }
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    setupAudio(stream, 'aux');
+  } catch(e) {
+    alert('AUX non disponibile. Usa il tasto MIC o collega un cavo audio.');
+  }
+}
+
+async function startMic() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    }});
+    setupAudio(stream, 'mic');
+  } catch(e) {
+    alert('Permesso microfono negato.');
+  }
+}
+
+function setupAudio(stream, mode) {
+  stopAudio();
+  audioStream = stream;
+  audioMode = mode;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.75;
+  audioSource = audioCtx.createMediaStreamSource(stream);
+  audioSource.connect(analyser);
+
+  document.getElementById('auxBtn').classList.toggle('active', mode === 'aux');
+  document.getElementById('micBtn').classList.toggle('active', mode === 'mic');
+  document.getElementById('audioModeLabel').textContent = mode === 'aux' ? '⚡ AUX IN' : '🎙 MICROFONO';
+  document.getElementById('audioSource').textContent = mode.toUpperCase();
+
+  startAnalysis();
+}
+
+function stopAudio() {
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  if (audioSource) audioSource.disconnect();
+  if (audioStream) audioStream.getTracks().forEach(t => t.stop());
+  if (audioCtx) audioCtx.close();
+  audioCtx = analyser = audioSource = audioStream = null;
+  audioMode = null;
+  document.getElementById('auxBtn').classList.remove('active');
+  document.getElementById('micBtn').classList.remove('active');
+  document.getElementById('audioModeLabel').textContent = 'NO AUDIO';
+  document.getElementById('audioSource').textContent = '--';
+}
+
+// ════════════════════════════════════════════════════
+// BEAT ENGINE — cuore del sistema
+// ════════════════════════════════════════════════════
+function startAnalysis() {
+  const fftData = new Uint8Array(analyser.frequencyBinCount);
+  const timeData = new Float32Array(analyser.fftSize);
+  const sens = () => parseInt(document.getElementById('sensSlider').value);
+  const gridLock = () => document.getElementById('gridLockToggle').checked;
+  const autoBeat = () => document.getElementById('autoBeatToggle').checked;
+
+  function loop() {
+    animFrame = requestAnimationFrame(loop);
+    analyser.getByteFrequencyData(fftData);
+    analyser.getFloatTimeDomainData(timeData);
+
+    const now = Date.now();
+    const sampleRate = audioCtx.sampleRate;
+    const binHz = sampleRate / analyser.fftSize;
+
+    // ── BASS ENERGY (60-180 Hz) ──
+    const bassLow  = Math.floor(60  / binHz);
+    const bassHigh = Math.floor(180 / binHz);
+    let bassSum = 0;
+    for (let i = bassLow; i <= bassHigh; i++) bassSum += fftData[i];
+    const bassEnergy = bassSum / ((bassHigh - bassLow + 1) * 255);
+
+    // ── ADAPTIVE THRESHOLD ──
+    energyHistory.push(bassEnergy);
+    if (energyHistory.length > 60) energyHistory.shift();
+    const avgEnergy = energyHistory.reduce((a,b)=>a+b,0) / energyHistory.length;
+    const dynamicThreshold = avgEnergy * (1.2 + (10 - sens()) * 0.15);
+    adaptiveThreshold = dynamicThreshold;
+
+    // ── UI ──
+    const barPct = Math.min(100, bassEnergy * 200);
+    const barEl = document.getElementById('beatBar');
+    barEl.style.width = barPct + '%';
+    barEl.className = 'beat-bar-fill' + (bassEnergy > adaptiveThreshold ? ' peak' : '');
+    document.getElementById('bassLevel').textContent = Math.round(bassEnergy * 100);
+
+    // ── ONSET DETECTION ──
+    const minInterval = bpm > 0 ? (60000 / bpm) * 0.7 : 250;
+    const isOnset = bassEnergy > adaptiveThreshold && (now - lastBeatTime) > minInterval;
+
+    if (isOnset) {
+      lastBeatTime = now;
+      onBeat(now, autoBeat());
+    }
+
+    // ── BEAT GRID PREDICTION ──
+    if (gridLock() && gridInterval > 0) {
+      const timeSinceGrid = now - lastGridBeat;
+      const nextBeat = lastGridBeat + gridInterval;
+      // Se siamo entro 30ms dal prossimo beat predetto e non è già stato emesso
+      if (Math.abs(now - nextBeat) < 30 && now > nextBeat - 30) {
+        lastGridBeat = nextBeat;
+        // Emetti beat predetto se non c'è già un onset reale vicino
+        if ((now - lastBeatTime) > 100) {
+          onBeat(now, autoBeat(), true); // true = predicted
+        }
+      }
+    }
+
+    // ── WAVEFORM DRAW ──
+    drawWaveform(timeData, fftData, bassEnergy);
+    drawGrid(now);
+
+    // ── FOOTER UPDATE ──
+    const ago = now - lastBeatTime;
+    document.getElementById('lastBeatAgo').textContent = ago < 5000 ? (ago/1000).toFixed(1)+'s fa' : '--';
+  }
+  loop();
+}
+
+function onBeat(ts, autoBeat, predicted = false) {
+  beatCount++;
+  document.getElementById('beatCount').textContent = beatCount;
+
+  // Flash UI
+  const dot = document.getElementById('beatDot');
+  dot.classList.add('on');
+  setTimeout(() => dot.classList.remove('on'), 100);
+
+  const bpmEl = document.getElementById('bpmNum');
+  bpmEl.classList.add('beat-flash');
+  setTimeout(() => bpmEl.classList.remove('beat-flash'), 80);
+
+  // Stadium ring
+  const ring = document.getElementById('beatRing');
+  ring.classList.add('hit');
+  setTimeout(() => ring.classList.remove('hit'), 120);
+  stadiumBeatFlash = 1.0;
+
+  // GO button pulse
+  const goBtn = document.getElementById('goBtn');
+  goBtn.classList.add('beat-pulse');
+  setTimeout(() => goBtn.classList.remove('beat-pulse'), 150);
+
+  // BPM calculation
+  beatHistory.push(ts);
+  if (beatHistory.length > 16) beatHistory.shift();
+  if (beatHistory.length >= 4) {
+    updateBPM();
+  }
+
+  // Auto send to fans con compensazione latenza
+  if (autoBeat && !isBlackout) {
+    const delay = Math.max(0, latencyComp);
+    setTimeout(() => pushBeat(colorMap[selColorKey]), delay);
+  }
+}
+
+function updateBPM() {
+  if (beatHistory.length < 4) return;
+
+  const intervals = [];
+  for (let i = 1; i < beatHistory.length; i++) {
+    intervals.push(beatHistory[i] - beatHistory[i-1]);
+  }
+
+  // Filtra outlier (intervalli troppo diversi dalla mediana)
+  intervals.sort((a,b) => a-b);
+  const median = intervals[Math.floor(intervals.length/2)];
+  const filtered = intervals.filter(i => Math.abs(i - median) < median * 0.3);
+
+  if (filtered.length < 2) return;
+
+  const avgInterval = filtered.reduce((a,b)=>a+b,0) / filtered.length;
+  const newBpm = Math.round(60000 / avgInterval);
+
+  if (newBpm > 40 && newBpm < 220) {
+    bpm = newBpm;
+    bpmConfidence = Math.min(100, Math.round((filtered.length / intervals.length) * 100));
+
+    // Aggiorna beat grid
+    gridInterval = avgInterval;
+    if (beatHistory.length >= 2) {
+      lastGridBeat = beatHistory[beatHistory.length - 1];
+    }
+
+    document.getElementById('bpmNum').textContent = bpm;
+    document.getElementById('bpmConf').textContent = 'CONF: ' + bpmConfidence + '%';
+  }
+}
+
+// ════════════════════════════════════════════════════
+// WAVEFORM CANVAS
+// ════════════════════════════════════════════════════
+function drawWaveform(timeData, fftData, energy) {
+  waveCvs.width = waveCvs.offsetWidth;
+  waveCvs.height = waveCvs.offsetHeight;
+  const W = waveCvs.width, H = waveCvs.height;
+
+  wCtx.clearRect(0,0,W,H);
+
+  // Waveform line
+  wCtx.beginPath();
+  wCtx.strokeStyle = `rgba(0,87,255,${0.4 + energy * 2})`;
+  wCtx.lineWidth = 1.5;
+  const step = W / timeData.length;
+  for (let i = 0; i < timeData.length; i++) {
+    const x = i * step;
+    const y = (1 - (timeData[i] + 1) / 2) * H;
+    i === 0 ? wCtx.moveTo(x,y) : wCtx.lineTo(x,y);
+  }
+  wCtx.stroke();
+
+  // Threshold line
+  const threshY = H * (1 - adaptiveThreshold * 1.5);
+  wCtx.setLineDash([4,4]);
+  wCtx.strokeStyle = 'rgba(255,170,0,.3)';
+  wCtx.lineWidth = 1;
+  wCtx.beginPath();
+  wCtx.moveTo(0, threshY);
+  wCtx.lineTo(W, threshY);
+  wCtx.stroke();
+  wCtx.setLineDash([]);
+}
+
+// ════════════════════════════════════════════════════
+// BEAT GRID CANVAS
+// ════════════════════════════════════════════════════
+function drawGrid(now) {
+  gridCvs.width = gridCvs.offsetWidth;
+  gridCvs.height = gridCvs.offsetHeight;
+  const W = gridCvs.width, H = gridCvs.height;
+
+  gCtx.clearRect(0,0,W,H);
+  gCtx.fillStyle = '#07090f';
+  gCtx.fillRect(0,0,W,H);
+
+  if (beatHistory.length === 0) return;
+
+  // Mostra ultimi 4 secondi di beat
+  const window = 4000;
+  const pxPerMs = W / window;
+
+  // Beat rilevati (cerchi pieni)
+  for (const ts of beatHistory) {
+    const age = now - ts;
+    if (age > window) continue;
+    const x = W - age * pxPerMs;
+    const alpha = 1 - age / window;
+    gCtx.beginPath();
+    gCtx.arc(x, H/2, 4, 0, Math.PI*2);
+    gCtx.fillStyle = `rgba(0,87,255,${alpha})`;
+    gCtx.fill();
+  }
+
+  // Beat predetti dalla griglia (rombi)
+  if (gridInterval > 0) {
+    let predTs = lastGridBeat;
+    for (let i = 0; i < 8; i++) {
+      predTs += gridInterval;
+      const age = now - predTs;
+      if (age > window) continue;
+      const x = W - age * pxPerMs;
+      const alpha = age < 0 ? 0.8 : (1 - age/window) * 0.4;
+      const color = age < 0 ? 'rgba(0,230,118,' : 'rgba(255,170,0,';
+      gCtx.save();
+      gCtx.translate(x, H/2);
+      gCtx.rotate(Math.PI/4);
+      gCtx.fillStyle = color + alpha + ')';
+      gCtx.fillRect(-3,-3,6,6);
+      gCtx.restore();
+    }
+  }
+
+  // Linea centrale (adesso)
+  gCtx.strokeStyle = 'rgba(255,255,255,.15)';
+  gCtx.lineWidth = 1;
+  gCtx.beginPath();
+  gCtx.moveTo(W, 0); gCtx.lineTo(W, H);
+  gCtx.stroke();
+}
+
+// ════════════════════════════════════════════════════
+// TAP TEMPO
+// ════════════════════════════════════════════════════
+function tapTempo() {
+  const now = Date.now();
+  tapTimes.push(now);
+  if (tapTimes.length > 8) tapTimes.shift();
+
+  if (tapTimes.length >= 2) {
+    const intervals = [];
+    for (let i = 1; i < tapTimes.length; i++)
+      intervals.push(tapTimes[i] - tapTimes[i-1]);
+    const avg = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+    bpm = Math.round(60000/avg);
+    gridInterval = avg;
+    lastGridBeat = now;
+    document.getElementById('bpmNum').textContent = bpm;
+    document.getElementById('bpmConf').textContent = 'TAP';
+  }
+
+  // Feedback visivo
+  const btn = document.querySelector('[onclick="tapTempo()"]');
+  btn.style.background = 'var(--accent)';
+  btn.style.color = '#fff';
+  setTimeout(() => { btn.style.background=''; btn.style.color=''; }, 100);
+}
+
+function resetBeatGrid() {
+  beatHistory.length = 0;
+  energyHistory.length = 0;
+  beatGridTimes.length = 0;
+  tapTimes.length = 0;
+  bpm = 0; bpmConfidence = 0; gridInterval = 0;
+  document.getElementById('bpmNum').textContent = '---';
+  document.getElementById('bpmConf').textContent = 'CONF: --';
+}
+
+function forceSyncBeat() {
+  lastGridBeat = Date.now();
+  const btn = document.getElementById('syncBtn');
+  btn.classList.add('active');
+  setTimeout(() => btn.classList.remove('active'), 300);
+}
+
+// ════════════════════════════════════════════════════
+// CONTROLS
+// ════════════════════════════════════════════════════
+function selColor(btn) {
+  document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  selColorKey = btn.dataset.c;
+  if (!isBlackout) {
+    stadiumColor = colorMap[selColorKey];
+  }
+}
+
+function selFx(btn) {
+  document.querySelectorAll('.fx-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  selFxKey = btn.dataset.f;
+}
+
+function sendCommand() {
+  if (isBlackout) { toggleBlackout(); return; }
+  const cmd = {
+    type:'command', color:selColorKey,
+    colorHex:colorMap[selColorKey],
+    effect:selFxKey, blackout:false, ts:Date.now()
+  };
+  pushCmd(cmd);
+  stadiumColor = colorMap[selColorKey];
+
+  // Flash GO button
+  const goBtn = document.getElementById('goBtn');
+  goBtn.style.boxShadow = '0 0 60px ' + colorMap[selColorKey];
+  setTimeout(() => goBtn.style.boxShadow = '', 400);
+}
+
+function toggleBlackout() {
+  isBlackout = !isBlackout;
+  const btn = document.getElementById('blackoutBtn');
+  btn.classList.toggle('on', isBlackout);
+  if (isBlackout) {
+    stadiumColor = '#000';
+    pushCmd({ type:'command', blackout:true, ts:Date.now() });
+  } else {
+    stadiumColor = colorMap[selColorKey];
+    pushCmd({ type:'command', blackout:false, color:selColorKey, colorHex:colorMap[selColorKey], effect:selFxKey, ts:Date.now() });
+  }
+}
+
+// ════════════════════════════════════════════════════
+// SLIDERS
+// ════════════════════════════════════════════════════
+document.getElementById('sensSlider').addEventListener('input', function() {
+  document.getElementById('sensVal').textContent = this.value;
+});
+
+document.getElementById('latencySlider').addEventListener('input', function() {
+  latencyComp = parseInt(this.value);
+  document.getElementById('latencyVal').textContent = (latencyComp >= 0 ? '+' : '') + latencyComp + 'ms';
+});
+
+// ════════════════════════════════════════════════════
+// QR CODE
+// ════════════════════════════════════════════════════
+function initQR() {
+  const url = window.location.href.replace('regia.html','fan.html');
+  try {
+    new QRCode(document.getElementById('qrTooltip'), {
+      text: url, width:120, height:120,
+      colorDark:'#ffffff', colorLight:'#0a0e18',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e) {}
+}
+
+// ════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════
+function hexToRgb(hex) {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return r ? {r:parseInt(r[1],16),g:parseInt(r[2],16),b:parseInt(r[3],16)} : {r:255,g:255,b:255};
+}
+
+function hexAlpha(hex, alpha) {
+  const {r,g,b} = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// Footer last beat timer
+setInterval(() => {
+  const ago = Date.now() - lastBeatTime;
+  document.getElementById('lastBeatAgo').textContent = (lastBeatTime > 0 && ago < 60000)
+    ? (ago/1000).toFixed(1)+'s fa' : '--';
+}, 100);
+
+// ════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════
+document.querySelector('[data-c="blu"]').classList.add('sel');
+document.querySelector('[data-f="solid"]').classList.add('sel');
+initStadium();
+initQR();
+</script>
+
+</body>
+</html>
